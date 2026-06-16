@@ -232,6 +232,21 @@ EOF
 ### 파일 전송 (⚠️ 현재 미동작 — 4번 한계 참조)
 신뢰성 있는 파일 전송은 카톡 입력란 옆의 첨부 버튼(클립 아이콘) 직접 클릭이 필요. 향후 구현 예정.
 
+### 수신 파일 다운로드 (.xlsx/.pdf/.zip 등 → ~/Downloads)
+상대가 보낸 파일 첨부를 ~/Downloads 로 저장한다. **방을 먼저 연 뒤** 실행(파일이 화면에 보여야 함).
+```bash
+# 1) 방 열기 (파일이 위에 있으면 스크롤 필요)
+$ALIAS_RUN kakao_read.py "고야태스크" --json --limit 60 >/dev/null
+# 2) 파일명 일부로 다운로드
+source $HOME/.local/bin/env && cd ~/.claude/skills/kakao_manager && \
+  uv run --with atomacos --python 3.12 python scripts/download_file.py "고야태스크" "무릎보호대" --json
+# -> {"ok": true, "path": "/Users/.../Downloads/....xlsx", "size": 8133}
+```
+- **동작 원리**: 파일 버블을 **우클릭 → 컨텍스트 메뉴 '저장하기' 클릭**(Quartz 마우스 이벤트). 카톡 컨테이너 `Downloads → ~/Downloads` 심링크라 곧장 ~/Downloads 에 떨어진다.
+- ⚠️ footer 의 '저장' 버튼은 hover 시에만/불안정하게 떠서 안 씀 → **우클릭 메뉴 경로가 안정적**.
+- '저장하기' 후 이름없는 AXDialog(저장 패널)가 뜨면 자동으로 Return 처리(기본 위치 수락).
+- 파일명 정규화(NFC/NFD) 차이로 `ls|grep` 이 빗나갈 수 있음 → 검증은 `ls ~/Downloads/*.xlsx` 나 python `os.path.exists` 로.
+
 ## 4. (나) 본인 채팅 식별 (필수 안전장치)
 
 송신 전 반드시 검증해야 함. 동명이인이 있을 수 있어서.
