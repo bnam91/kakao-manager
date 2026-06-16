@@ -1,0 +1,31 @@
+{
+  "_comment": "kakao_manager 개인 설정 템플릿. 복사해서 ~/.config/kakao_manager/config.json 에 두고 본인 값으로 채우세요. 비밀번호를 git에 커밋하지 마세요. 카톡 계정이 여러 개면 accounts 에 여러 개 추가하세요.",
+
+  "active": "default",
+  "_active_help": "기본으로 사용할 계정 key. config.py --account <key> 로 매 호출마다 바꿀 수도 있음.",
+
+  "accounts": {
+    "default": {
+      "label": "메인 계정",
+
+      "kakao": {
+        "id": "",
+        "pw": ""
+      },
+
+      "self_display_name": "",
+      "_self_display_name_help": "본인 카톡 표시명. (나) 자기채팅 식별 + 동명이인 구분에 사용.",
+
+      "self_aliases": ["나", "self", "본인"],
+
+      "aliases": [
+        {
+          "keywords": ["별명1", "별명2"],
+          "chat_name": "정확한 채팅방명",
+          "note": "예시 — 본인 값으로 교체하거나 빈 배열 [] 로 시작하세요."
+        }
+      ]
+    }
+  },
+  "_accounts_help": "계정 추가 예: \"work\": { \"label\":\"업무폰\", \"kakao\":{\"id\":\"\",\"pw\":\"\"}, \"self_display_name\":\"\", \"aliases\":[] }"
+}

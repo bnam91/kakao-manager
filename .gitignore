@@ -1,0 +1,9 @@
+# 개인 설정/자격증명은 절대 커밋 금지 (레포 밖 ~/.config/kakao_manager/config.json 사용 권장)
+config.json
+scripts/config.json
+*.env
+.env
+
+# python 캐시
+__pycache__/
+*.pyc
