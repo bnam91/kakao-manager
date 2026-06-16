@@ -24,7 +24,6 @@ except ImportError:
 
 BUNDLE = "com.kakao.KakaoTalkMac"
 MAIN_TITLES = ("카카오톡", "KakaoTalk")
-SIGNATURE = "\n\nsent with claude code"
 
 
 def ascript(s):
@@ -81,47 +80,15 @@ def find_open_chat_window(app, chat_name):
     return None
 
 
-def click_tab_button(app, *titles):
-    """메인창 사이드바 탭 버튼을 '이름'으로 찾아 실시간 중심좌표 클릭.
-    창을 옮기거나 크기를 바꿔도 매번 좌표를 다시 계산하므로 고정좌표보다 견고.
-    찾으면 True, 못 찾으면 False."""
-    main = main_window(app)
-    if not main:
-        return False
-    btns = []
-    find_role_all(main, "AXButton", btns, max_depth=20)
-    wanted = tuple(t for t in titles)
-    for b in btns:
-        try:
-            title = (b.AXTitle or "") + " " + (b.AXDescription or "")
-        except Exception:
-            title = ""
-        if any(w in title for w in wanted):
-            try:
-                p, s = b.AXPosition, b.AXSize
-                x, y = int(p.x + s.width / 2), int(p.y + s.height / 2)
-                ascript(f'tell application "System Events" to click at {{{x}, {y}}}')
-                time.sleep(0.6)
-                return True
-            except Exception:
-                pass
-    return False
-
-
 def ensure_chat_tab_simple():
-    """카톡 메인창 채팅 탭으로 전환. 고정좌표 대신 단축키(Cmd+2) → 실패 시 버튼 동적탐색."""
+    """카톡 메인창 채팅 탭으로 전환 (좌측 사이드바 좌표 클릭, atomacos walk 없음)."""
     ascript('tell application "KakaoTalk" to activate')
     time.sleep(0.4)
     ascript('tell application "System Events" to tell process "KakaoTalk" to perform action "AXRaise" of (first window whose name is "카카오톡")')
     time.sleep(0.3)
-    # 채팅 탭 = Cmd+2 (창 위치/크기 무관). key code 19 = '2'
-    key_code(19, "command down")
+    # 채팅 탭 = 사이드바 두 번째 (좌표 (375, 223))
+    ascript('tell application "System Events" to click at {375, 223}')
     time.sleep(0.7)
-    # 단축키가 안 먹는 환경 대비: 사이드바 '채팅' 버튼을 동적 좌표로 클릭
-    app = get_app()
-    if app:
-        click_tab_button(app, "채팅")
-    time.sleep(0.3)
 
 
 def is_self_chat_in_list(app, chat_name):
@@ -189,6 +156,11 @@ def search_and_open(chat_name):
             pass
     key_code(3, "command down")  # Cmd+F
     time.sleep(0.5)
+    # 검색창에 이전 검색어가 남아있으면 누적되어 엉뚱한 방으로 가므로 먼저 비운다
+    key_code(0, "command down")  # Cmd+A (전체 선택)
+    time.sleep(0.15)
+    key_code(51)  # Delete
+    time.sleep(0.2)
     subprocess.run(["pbcopy"], input=chat_name.encode(), check=True)
     key_code(9, "command down")  # Cmd+V
     time.sleep(0.8)
@@ -196,6 +168,31 @@ def search_and_open(chat_name):
     time.sleep(0.2)
     key_code(36)   # Enter
     time.sleep(0.9)
+    # 방을 연 뒤 검색창을 비워 목록 필터가 남지 않도록 한다
+    clear_search_box()
+
+
+def clear_search_box():
+    """메인창 검색창을 비운다 (검색어 잔류로 목록이 빈 채로 남는 문제 방지).
+    AXSearchField/일반 검색 텍스트필드는 클릭으로 포커스가 안 잡힐 수 있어
+    AXFocused 속성을 직접 켠 뒤 Cmd+A + Delete 로 지운다."""
+    ascript(
+        'tell application "System Events" to tell process "KakaoTalk"\n'
+        '  set w to first window whose name is "카카오톡"\n'
+        '  repeat with tf in (text fields of w)\n'
+        '    try\n'
+        '      if (value of tf as text) is not "" then\n'
+        '        set value of attribute "AXFocused" of tf to true\n'
+        '        delay 0.1\n'
+        '        key code 0 using {command down}\n'
+        '        delay 0.1\n'
+        '        key code 51\n'
+        '        delay 0.1\n'
+        '      end if\n'
+        '    end try\n'
+        '  end repeat\n'
+        'end tell'
+    )
 
 
 def raise_chat_window(app, chat_name):
@@ -320,8 +317,7 @@ def run(args):
 
     # === Step 4: 전송 ===
     if args.text:
-        msg = args.text + (SIGNATURE if not args.no_signature else "")
-        send_text(msg)
+        send_text(args.text)
         kind = "text"
     elif args.image:
         send_image(args.image)
@@ -356,7 +352,6 @@ def main():
     g.add_argument("--image", "-i", help="이미지 파일 경로 (.png 권장)")
     g.add_argument("--file", "-f", help="파일 경로 (.txt/.pdf/.xlsx 등)")
     p.add_argument("--verify-me", action="store_true", help="(나) 본인 채팅인지 'badge me'로 검증 후 발송")
-    p.add_argument("--no-signature", action="store_true", help="텍스트에 'sent with claude code' 시그니처 빼기")
     p.add_argument("--json", "-j", action="store_true", help="JSON 출력")
     args = p.parse_args()
 

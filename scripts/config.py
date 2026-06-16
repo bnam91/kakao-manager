@@ -27,6 +27,7 @@ kakao_manager config — 개인 설정(JSON) 로더 (다중 계정 지원)
     | config.py --set-account default
   config.py --set-active default         # 활성 계정 지정
 """
+from __future__ import annotations  # python 3.10 에서 'str | None' 타입힌트 호환
 import argparse, json, os, shutil, sys
 from pathlib import Path
 
