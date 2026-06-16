@@ -33,12 +33,27 @@ source $HOME/.local/bin/env && \
 | 파일 | 역할 |
 |---|---|
 | `SKILL.md` | 전체 운영 절차 + 실전 함정 (Claude가 읽는 본체) |
+| `plugin.json` | 플러그인-like 매니페스트 (요구사항/스크립트/operations) |
 | `scripts/config.py` | 다중 계정 자격증명/채팅방 alias 관리 (레포 밖 JSON) |
-| `scripts/config.example.json` | 설정 템플릿 |
+| `scripts/config.example.json` | 자격증명 설정 템플릿 |
+| `scripts/targets.py` | **타겟(방 묶음)** 데이터 레이어 (list/show/rooms/init/save) |
+| `scripts/target.example.json` | 타겟 템플릿 |
 | `scripts/selftest.py` | 자가진단 (uv/로그인/권한/config/(나) 식별) |
-| `scripts/send_safe.py` | 안전 전송 (이름 정규화 + (나) 검증 가드) |
+| `scripts/send_safe.py` | 안전 전송 (이름 정규화 + (나) 검증 가드, 입력란 동적 탐색) |
 
 메시지 읽기/전송 코어(`kakao_read.py` / `kakao_send.py`)는 위 플러그인 레포에서 가져온다.
+
+### 타겟(방 묶음) — 반복 작업 대상 분리
+
+이 스킬은 **범용 엔진**(일괄조사·브로드캐스트·읽기·전송)이고, 작업 대상이 되는 특정 방 집합(예: "○○ 체험단 39개 방")은 스킬에 박지 않고 **'타겟'** 으로 분리한다. 타겟은 자격증명과 같은 원칙으로 **레포 밖** `~/.config/kakao_manager/targets/<name>.json` 에 저장된다(커밋 안 됨).
+
+```bash
+python3 scripts/targets.py --init mygroup       # 템플릿 생성 → account/prefix/rooms 채우기
+python3 scripts/targets.py --list               # 등록된 타겟
+python3 scripts/targets.py --rooms mygroup       # 방 제목 한 줄씩
+```
+
+그러면 `"mygroup 방들 일괄조사해줘"` / `"mygroup 방들에 이거 보내줘"` 처럼 작업 대상만 바꿔 재사용한다. (자세히는 SKILL.md §13)
 
 ## 보안
 

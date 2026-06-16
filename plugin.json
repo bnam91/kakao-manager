@@ -1,0 +1,36 @@
+{
+  "name": "kakao_manager",
+  "version": "0.2.0",
+  "description": "카카오톡 Mac 앱을 Claude Code 터미널에서 직접 조작하는 매니저 스킬 (검색/읽기/요약/전송/자동로그인 + 오픈채팅 일괄조사/브로드캐스트).",
+  "kind": "skill",
+  "entry": "SKILL.md",
+  "homepage": "https://github.com/bnam91/kakao-manager",
+  "platform": ["darwin"],
+  "requires": {
+    "apps": ["KakaoTalk.app"],
+    "tools": ["uv", "osascript", "screencapture"],
+    "python": ">=3.12",
+    "pip": ["atomacos"],
+    "permissions": ["accessibility", "screen-recording(공지 캡처 시)"]
+  },
+  "data": {
+    "credentials": "~/.config/kakao_manager/config.json (레포 밖, gitignore, 0600)",
+    "targets": "~/.config/kakao_manager/targets/<name>.json (레포 밖, gitignore)"
+  },
+  "scripts": {
+    "config": "scripts/config.py — 다중 계정 자격증명/alias 관리",
+    "targets": "scripts/targets.py — 타겟(방 묶음) 데이터 레이어",
+    "selftest": "scripts/selftest.py — 설치/세팅 자가진단 (읽기 전용)",
+    "send_safe": "scripts/send_safe.py — (나)검증·이름정규화·발송검증 붙은 전송 래퍼"
+  },
+  "operations": {
+    "summarize": "단톡방 오늘 메시지 읽고 요약 (SKILL.md §7)",
+    "send": "텍스트/이미지 전송, (나) 검증 가드 (§4, §7)",
+    "survey": "오픈채팅 방 묶음 일괄조사 — 존재여부/URL/공지 (§11)",
+    "broadcast": "방 묶음에 메시지 일괄 전송, 보내자마자 즉시 검증 (§11.4)",
+    "open_chat": "방 열기 신뢰 패턴 — AXFocused→Cmd+V→Quartz 더블클릭 (§12.2)"
+  },
+  "depends_on": {
+    "kakaotalk_core": "https://github.com/team-attention/plugins-for-claude-natives (kakao_read.py / kakao_send.py)"
+  }
+}

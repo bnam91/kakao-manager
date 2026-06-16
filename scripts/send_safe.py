@@ -81,15 +81,47 @@ def find_open_chat_window(app, chat_name):
     return None
 
 
+def click_tab_button(app, *titles):
+    """메인창 사이드바 탭 버튼을 '이름'으로 찾아 실시간 중심좌표 클릭.
+    창을 옮기거나 크기를 바꿔도 매번 좌표를 다시 계산하므로 고정좌표보다 견고.
+    찾으면 True, 못 찾으면 False."""
+    main = main_window(app)
+    if not main:
+        return False
+    btns = []
+    find_role_all(main, "AXButton", btns, max_depth=20)
+    wanted = tuple(t for t in titles)
+    for b in btns:
+        try:
+            title = (b.AXTitle or "") + " " + (b.AXDescription or "")
+        except Exception:
+            title = ""
+        if any(w in title for w in wanted):
+            try:
+                p, s = b.AXPosition, b.AXSize
+                x, y = int(p.x + s.width / 2), int(p.y + s.height / 2)
+                ascript(f'tell application "System Events" to click at {{{x}, {y}}}')
+                time.sleep(0.6)
+                return True
+            except Exception:
+                pass
+    return False
+
+
 def ensure_chat_tab_simple():
-    """카톡 메인창 채팅 탭으로 전환 (좌측 사이드바 좌표 클릭, atomacos walk 없음)."""
+    """카톡 메인창 채팅 탭으로 전환. 고정좌표 대신 단축키(Cmd+2) → 실패 시 버튼 동적탐색."""
     ascript('tell application "KakaoTalk" to activate')
     time.sleep(0.4)
     ascript('tell application "System Events" to tell process "KakaoTalk" to perform action "AXRaise" of (first window whose name is "카카오톡")')
     time.sleep(0.3)
-    # 채팅 탭 = 사이드바 두 번째 (좌표 (375, 223))
-    ascript('tell application "System Events" to click at {375, 223}')
+    # 채팅 탭 = Cmd+2 (창 위치/크기 무관). key code 19 = '2'
+    key_code(19, "command down")
     time.sleep(0.7)
+    # 단축키가 안 먹는 환경 대비: 사이드바 '채팅' 버튼을 동적 좌표로 클릭
+    app = get_app()
+    if app:
+        click_tab_button(app, "채팅")
+    time.sleep(0.3)
 
 
 def is_self_chat_in_list(app, chat_name):

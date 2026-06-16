@@ -169,7 +169,10 @@ osascript -e 'tell application "System Events" to tell process "KakaoTalk" to ke
 플러그인 경로: `~/github/plugins-for-claude-natives/plugins/kakaotalk/scripts/`
 
 ```bash
+# 코어(읽기/전송) = 플러그인 레포
 ALIAS_RUN='source $HOME/.local/bin/env && cd ~/github/plugins-for-claude-natives/plugins/kakaotalk/scripts && uv run --with atomacos --python 3.12 python'
+# 이 스킬의 래퍼(send_safe/targets 등) = 스킬 scripts/ (SKILLDIR 은 이 SKILL.md 가 있는 폴더)
+ALIAS_RUN_SAFE='source $HOME/.local/bin/env && cd "$SKILLDIR/scripts" && uv run --with atomacos --python 3.12 python'
 ```
 
 ### 채팅방 검색
@@ -194,30 +197,13 @@ $ALIAS_RUN kakao_send.py "채팅방" "메시지"
 # 옵션: --no-signature, --close, --json
 ```
 
-### 이미지 전송 (PNG 클립보드 paste 방식)
+### 이미지 전송 (PNG)
+**권장: `send_safe.py --image`** — 입력란을 **동적으로 찾아**(AXTextArea 최하단) 포커스하므로 고정 좌표가 필요 없다. 창을 옮기거나 크기를 바꿔도 안전.
 ```bash
-osascript -e 'set the clipboard to (read POSIX file "/path/to.png" as «class PNGf»)'
-osascript <<EOF
-tell application "KakaoTalk" to activate
-delay 0.3
-tell application "System Events"
-  tell process "KakaoTalk"
-    repeat with w in windows
-      if (name of w) is "<채팅방명>" then  -- config.py --resolve 로 얻은 정확한 채팅방명
-        perform action "AXRaise" of w
-        exit repeat
-      end if
-    end repeat
-    delay 0.4
-    click at {911, 763}  -- 입력란 좌표 (창 크기 따라 조정)
-    delay 0.3
-    key code 9 using {command down}   -- Cmd+V
-    delay 1.5
-    key code 36                        -- Enter
-  end tell
-end tell
-EOF
+$ALIAS_RUN_SAFE send_safe.py "채팅방" --image /path/to.png --json
+# (나)에게 보낼 땐 --verify-me 추가
 ```
+> ⚠️ 고정 좌표(`click at {x,y}`)로 입력란을 클릭하는 방식은 **금지**. 사용자가 창을 옮기면 깨진다. 좌표가 필요하면 `send_safe.get_input_area_position()`처럼 AXPosition+AXSize에서 매번 재계산할 것.
 
 ### 파일 전송 (⚠️ 현재 미동작 — 4번 한계 참조)
 신뢰성 있는 파일 전송은 카톡 입력란 옆의 첨부 버튼(클립 아이콘) 직접 클릭이 필요. 향후 구현 예정.
@@ -370,3 +356,27 @@ python3 scripts/config.py --resolve "나"       # -> self_display_name 출력
 5. 검증: 결과 `ok:true` + `rows_before < rows_after`.
 
 **오발송 가드**: 동명이인/유사방이 여러 개면 atomacos로 **행 이름을 정확매칭한 그 행만** 더블클릭. 본인(나) 채팅 식별은 §4 'badge me'(채팅 목록 row에만 있고 채팅창 헤더엔 없음) 검증을 반드시 거친다.
+
+## 13. 타겟(방 묶음) — 반복 작업의 대상 분리
+
+**개념**: 이 스킬(§11 일괄조사, §11.4 브로드캐스트 등)은 **범용 엔진**이다. 특정 작업 대상(예: "○○ 체험단 39개 방")은 스킬에 하드코딩하지 않고 **'타겟'이라는 레포 밖 데이터**로 분리한다. 타겟은 *고정 메시지를 반복 발송하는 캠페인이 아니라*, 그때그때 다른 작업을 돌릴 **고정된 방 집합**이다. 자격증명(`config.json`)과 같은 원칙: 개인/계정 종속 데이터는 `~/.config/kakao_manager/` 에.
+
+- 저장: `~/.config/kakao_manager/targets/<name>.json` (gitignore, 0600). 템플릿: `scripts/target.example.json`.
+- 데이터 레이어: `scripts/targets.py` (엔진이 아니라 **데이터 CRUD**만; AX 자동화는 Claude가 §11~§12 절차로 구동).
+
+```bash
+python3 scripts/targets.py --list                 # 등록된 타겟
+python3 scripts/targets.py --init <name>          # 템플릿 복사 → account/prefix/rooms 채우기
+python3 scripts/targets.py --account <name>       # 이 타겟의 계정 key (config.py --account 로 전달)
+python3 scripts/targets.py --rooms <name>         # 방 제목 한 줄씩 (브로드캐스트 루프용)
+python3 scripts/targets.py --rooms <name> --field url   # URL만
+echo '{"rooms":[...]}' | python3 scripts/targets.py --save <name> --at <ISO>  # 일괄조사 스냅샷 저장
+```
+
+**작업 흐름 예** ("<name> 방들 일괄조사해줘"):
+1. `ACC=$(targets.py --account <name>)` → 해당 계정으로 로그인/활성화(§2)
+2. `prefix`/`number_range`로 §11.1 전수 검색 → 존재/URL/공지 수집
+3. 결과를 `targets.py --save <name> --at <ISO>` 로 스냅샷 저장 + (필요 시) 구글시트 정리
+4. ("<name> 방들에 이거 보내줘") → `targets.py --rooms <name>` 루프 + §11.4(보내자마자 즉시 검증) + 방 닫고 다음
+
+> 공개 레포엔 타겟 **이름조차** 들어가지 않는다. 새 작업 대상이 생기면 `targets.py --init`로 로컬에만 만든다.

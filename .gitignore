@@ -4,6 +4,11 @@ scripts/config.json
 *.env
 .env
 
+# 타겟(방 묶음) 실데이터도 커밋 금지 — 템플릿(target.example.json)만 추적.
+# 실 타겟은 레포 밖 ~/.config/kakao_manager/targets/ 에 저장.
+targets/
+*.target.json
+
 # python 캐시
 __pycache__/
 *.pyc

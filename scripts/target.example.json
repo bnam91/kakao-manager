@@ -1,0 +1,28 @@
+{
+  "_comment": "kakao_manager 타겟(방 묶음) 템플릿. 복사해서 ~/.config/kakao_manager/targets/<이름>.json 에 두세요. 실 타겟은 레포에 커밋하지 않습니다. '타겟'은 반복 작업(일괄조사/브로드캐스트)의 대상이 되는 고정된 오픈채팅방 집합입니다.",
+
+  "name": "example",
+  "label": "예시 타겟",
+  "account": "default",
+  "_account_help": "이 타겟이 속한 계정 key (config.json 의 accounts.<key>). 작업 시 --account 로 전달.",
+
+  "prefix": "예시_체험단",
+  "_prefix_help": "방 이름 공통 프리픽스. 일괄조사 시 prefix+번호로 전수 검색.",
+
+  "number_range": [1, 55],
+  "_number_range_help": "[시작, 끝] 번호. 일괄조사가 이 범위를 십자리 단위로 훑는다.",
+
+  "rooms": [
+    {
+      "num": "01",
+      "title": "예시_체험단01_...",
+      "url": "https://open.kakao.com/o/xxxxxxxx",
+      "exists": true,
+      "note": ""
+    }
+  ],
+  "_rooms_help": "마지막 일괄조사 스냅샷. targets.py --save 로 갱신. exists=false 면 강퇴/없음.",
+
+  "last_survey": null,
+  "_last_survey_help": "마지막 일괄조사 일시(ISO). targets.py --save 시 인자로 기록."
+}
