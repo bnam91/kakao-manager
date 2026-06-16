@@ -184,6 +184,14 @@ $ALIAS_RUN kakao_read.py --search "키워드" --json
 $ALIAS_RUN kakao_read.py --list --limit 50 --json
 ```
 
+### 안읽음 총합 (백그라운드 — UI/스샷 불필요)
+Dock 뱃지값을 읽어 전체 안읽음 합계를 즉시 반환. 카톡 포커스·창 상태 무관.
+```bash
+python3 scripts/unread.py            # 정수 (예: 29)
+python3 scripts/unread.py --json     # {"unread_total": 29}
+```
+- 한계: **전체 합계만**. 방별 분해 불가(메시지 DB가 SQLCipher 암호화). "어느 방에 몇 개"는 `--list` UI 필요.
+
 ### 메시지 읽기 (오늘만, 정확 날짜)
 ```bash
 # --date YYYY-MM-DD, --scroll-up/down N, --limit N
