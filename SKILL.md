@@ -316,6 +316,7 @@ python3 scripts/config.py --resolve "나"       # -> self_display_name 출력
 - 닫기: `kakao_send.py`/`kakao_read.py`의 `--close` 옵션, 또는 osascript `keystroke "w" using command down`.
 - ★타이밍: `activate` 직후 바로 창 조회하면 인식 안 됨 → **activate 후 1s+ 대기** → `window "방이름"` 존재 확인 → `AXRaise` → `Cmd+W`. 닫은 뒤 창 목록에 메인 '카카오톡'만 남았는지 검증.
 - 메인 '카카오톡'(앱 목록창)은 닫지 않는다 — 개별 대화방 창만.
+- ★**검색어도 클리어**: `--search`로 채팅 검색을 썼으면 채팅탭 검색바에 검색어가 남아 목록이 필터된 채 유지된다 → atomacos로 메인창 walk → 첫 검색필드(`AXTextField`/`AXSearchField`) `AXValue=''`로 비운다(안 먹으면 `AXFocused=True` 후 Cmd+A→Delete). 다음 작업이 엉뚱한 필터 상태에서 시작되는 것 방지.
 
 ## 8. 추가/개선 권장 기능 (우선순위 순)
 
