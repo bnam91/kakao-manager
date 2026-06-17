@@ -311,6 +311,12 @@ python3 scripts/config.py --resolve "나"       # -> self_display_name 출력
 1. 메시지 전송
 2. 일정 시간 후 read로 응답 폴링 (시간 윈도우 + sender 필터)
 
+### ★ 작업 종료 공통 규칙 — 대화창 닫기 (필수)
+모든 카톡 작업(읽기/전송/다운로드/요약)이 끝나면 **그 대화방 창을 반드시 닫는다.** 용무 끝난 대화창을 열어두지 않음(현빈 지시 2026-06-17 — 누적 시 화면 혼란·오발송 위험).
+- 닫기: `kakao_send.py`/`kakao_read.py`의 `--close` 옵션, 또는 osascript `keystroke "w" using command down`.
+- ★타이밍: `activate` 직후 바로 창 조회하면 인식 안 됨 → **activate 후 1s+ 대기** → `window "방이름"` 존재 확인 → `AXRaise` → `Cmd+W`. 닫은 뒤 창 목록에 메인 '카카오톡'만 남았는지 검증.
+- 메인 '카카오톡'(앱 목록창)은 닫지 않는다 — 개별 대화방 창만.
+
 ## 8. 추가/개선 권장 기능 (우선순위 순)
 
 ### 우선순위 ★★★ (다음 작업 권장)
