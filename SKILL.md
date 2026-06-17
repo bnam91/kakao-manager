@@ -19,9 +19,9 @@ osascript -e 'tell application "System Events" to tell process "KakaoTalk" to ge
 # 3) uv 설치
 test -x ~/.local/bin/uv && echo OK || curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 4) 플러그인 레포 클론
-test -d ~/github/plugins-for-claude-natives || \
-  (cd ~/github && git clone https://github.com/team-attention/plugins-for-claude-natives.git)
+# 4) (vendored) kakao_send.py/kakao_read.py 는 스킬 폴더에 동봉됨 — 외부 플러그인 클론 불필요
+#    경로: ~/.claude/skills/kakao_manager/scripts/kakao_send.py, kakao_read.py
+test -f ~/.claude/skills/kakao_manager/scripts/kakao_send.py && echo "vendored OK" || echo "MISSING kakao_send.py"
 
 # 5) 접근성 권한 (atomacos가 카톡 enumerate 가능한지 한 줄 테스트)
 source $HOME/.local/bin/env && uv run --with atomacos --python 3.12 python -c "
@@ -166,12 +166,12 @@ osascript -e 'tell application "System Events" to tell process "KakaoTalk" to ke
 # Cmd+1=친구, Cmd+2=채팅, Cmd+3=더보기
 ```
 
-## 3. 핵심 명령어 (플러그인 호출)
+## 3. 핵심 명령어 (스킬 자체 vendored 스크립트)
 
-플러그인 경로: `~/github/plugins-for-claude-natives/plugins/kakaotalk/scripts/`
+★ 스크립트 경로(vendored): `~/.claude/skills/kakao_manager/scripts/` — `kakao_send.py`/`kakao_read.py`는 원래 team-attention 외부 플러그인 것이었으나 **git pull 휘발 방지를 위해 스킬 폴더로 복사(vendoring)해 왔다(2026-06-17, 현빈 지시)**. 이제 외부 플러그인을 갱신해도 우리 카톡 동작·서명설정(SIGNATURE="")은 안 깨진다. 외부 플러그인 의존 없음.
 
 ```bash
-ALIAS_RUN='source $HOME/.local/bin/env && cd ~/github/plugins-for-claude-natives/plugins/kakaotalk/scripts && uv run --with atomacos --python 3.12 python'
+ALIAS_RUN='source $HOME/.local/bin/env 2>/dev/null; cd ~/.claude/skills/kakao_manager/scripts && uv run --with atomacos --python 3.12 python'
 ```
 
 ### 채팅방 검색
@@ -200,9 +200,10 @@ $ALIAS_RUN kakao_read.py "채팅방" --scroll-down 5 --date 2026-05-29 --json --
 
 ### 메시지 보내기 (텍스트)
 ```bash
-$ALIAS_RUN kakao_send.py "채팅방" "메시지"
+$ALIAS_RUN kakao_send.py "채팅방" "메시지" --no-signature
 # 옵션: --no-signature, --close, --json
 ```
+> ★★★ 서명 금지(현빈 지시 2026-06-17): 외부로 나가는 모든 메시지 끝에 'sent with claude code' 같은 서명이 **절대 붙으면 안 됨**. 플러그인 `kakao_send.py`의 `SIGNATURE`를 빈 문자열로 패치해 뒀지만, 이 레포는 team-attention 외부 레포라 **`git pull` 시 패치가 휘발**된다. 그러니 **전송 시 항상 `--no-signature`를 명시**하는 것이 안전(이중 안전망). 전송 후 read로 끝줄에 서명 안 붙었는지 검증할 것.
 
 ### 이미지 전송 (PNG 클립보드 paste 방식)
 ```bash
