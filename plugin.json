@@ -30,7 +30,7 @@
     "broadcast": "방 묶음에 메시지 일괄 전송, 보내자마자 즉시 검증 (§11.4)",
     "open_chat": "방 열기 신뢰 패턴 — AXFocused→Cmd+V→Quartz 더블클릭 (§12.2)"
   },
-  "depends_on": {
-    "kakaotalk_core": "https://github.com/team-attention/plugins-for-claude-natives (kakao_read.py / kakao_send.py)"
+  "vendored": {
+    "kakaotalk_core": "scripts/kakao_read.py · scripts/kakao_send.py — team-attention/plugins-for-claude-natives 에서 복사해 동봉(외부 의존 없음). upstream 동기화는 간헐 수동 체크."
   }
 }

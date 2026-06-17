@@ -1,7 +1,7 @@
 # kakao_manager
 
 카카오톡 Mac 앱을 **Claude Code 터미널에서 직접 조작**하는 매니저 스킬.
-[team-attention/kakaotalk](https://github.com/team-attention/plugins-for-claude-natives) 플러그인을 래핑해서 채팅방 검색·목록·메시지 읽기·날짜필터·요약·전송·이미지 전송·(나) 자기채팅 식별·자동 로그인을 일관된 방식으로 처리한다.
+카톡 앱 UI 자동화(`atomacos` 접근성 트리)로 채팅방 검색·목록·메시지 읽기·날짜필터·요약·전송·이미지 전송·(나) 자기채팅 식별·자동 로그인을 일관된 방식으로 처리한다. 핵심 스크립트 `kakao_read.py`/`kakao_send.py`는 [team-attention/kakaotalk](https://github.com/team-attention/plugins-for-claude-natives) 플러그인에서 **vendoring(스킬 폴더로 복사)** 해 동봉했으며, 외부 플러그인 의존 없이 독립 동작한다.
 
 ## 설치 (다른 맥에 클론해서 쓰기)
 

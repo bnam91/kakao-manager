@@ -13,8 +13,7 @@
 - [ ] **uv** 설치 — `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - [ ] **접근성 권한**: 시스템 설정 → 개인정보 보호 및 보안 → **손쉬운 사용**에서 터미널/Claude Code 토글 **ON**
 - [ ] (공지 캡처 작업 시) **화면 기록 권한** 같은 위치에서 ON
-- [ ] 메시지 읽기/전송 코어 플러그인 클론:
-      `git clone https://github.com/team-attention/plugins-for-claude-natives.git ~/github/plugins-for-claude-natives`
+- 메시지 읽기/전송 코어 스크립트(`kakao_read.py`/`kakao_send.py`)는 **스킬에 vendoring되어 동봉**됨 → 외부 플러그인 별도 클론 불필요.
 
 ## 1. 스킬 클론
 

@@ -1,6 +1,6 @@
 ---
 name: kakao_manager
-description: 카카오톡 Mac 앱을 Claude Code 터미널에서 직접 조작하는 매니저 스킬. team-attention/kakaotalk 플러그인을 래핑해서 채팅방 검색/목록/메시지 읽기/날짜필터/요약/메시지 전송/이미지 전송/(나) 자기채팅 식별/자동 로그인을 일관된 방식으로 처리한다. 사용자가 "카톡 매니저", "/kakao_manager", "카톡 봐줘", "단톡방 요약해줘", "현빈한테 카톡 보내줘", "카톡 자동화" 등을 말할 때 실행해.
+description: 카카오톡 Mac 앱을 Claude Code 터미널에서 직접 조작하는 매니저 스킬. 카톡 앱 UI 자동화(atomacos, vendored kakao_read.py/kakao_send.py)로 채팅방 검색/목록/메시지 읽기/날짜필터/요약/메시지 전송/이미지 전송/(나) 자기채팅 식별/자동 로그인을 일관된 방식으로 처리한다. 사용자가 "카톡 매니저", "/kakao_manager", "카톡 봐줘", "단톡방 요약해줘", "현빈한테 카톡 보내줘", "카톡 자동화" 등을 말할 때 실행해.
 ---
 
 # kakao_manager 스킬
@@ -203,7 +203,7 @@ $ALIAS_RUN kakao_read.py "채팅방" --scroll-down 5 --date 2026-05-29 --json --
 $ALIAS_RUN kakao_send.py "채팅방" "메시지" --no-signature
 # 옵션: --no-signature, --close, --json
 ```
-> ★★★ 서명 금지(현빈 지시 2026-06-17): 외부로 나가는 모든 메시지 끝에 'sent with claude code' 같은 서명이 **절대 붙으면 안 됨**. 플러그인 `kakao_send.py`의 `SIGNATURE`를 빈 문자열로 패치해 뒀지만, 이 레포는 team-attention 외부 레포라 **`git pull` 시 패치가 휘발**된다. 그러니 **전송 시 항상 `--no-signature`를 명시**하는 것이 안전(이중 안전망). 전송 후 read로 끝줄에 서명 안 붙었는지 검증할 것.
+> ★★★ 서명 금지(현빈 지시 2026-06-17): 외부로 나가는 모든 메시지 끝에 'sent with claude code' 같은 서명이 **절대 붙으면 안 됨**. vendored `kakao_send.py`의 `SIGNATURE`를 빈 문자열로 패치해 뒀고(스킬 폴더 사본이라 외부 git pull 영향 없음 = 휘발 안 됨), 안전벨트로 **전송 시 항상 `--no-signature`도 명시**한다. 전송 후 read로 끝줄에 서명 안 붙었는지 검증할 것.
 
 ### 이미지 전송 (PNG 클립보드 paste 방식)
 ```bash
