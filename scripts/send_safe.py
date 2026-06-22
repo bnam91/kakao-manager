@@ -24,6 +24,7 @@ except ImportError:
 
 BUNDLE = "com.kakao.KakaoTalkMac"
 MAIN_TITLES = ("카카오톡", "KakaoTalk")
+SIGNATURE = "\n\nsent with claude code"
 
 
 def ascript(s):
@@ -317,7 +318,8 @@ def run(args):
 
     # === Step 4: 전송 ===
     if args.text:
-        send_text(args.text)
+        msg = args.text + (SIGNATURE if not args.no_signature else "")
+        send_text(msg)
         kind = "text"
     elif args.image:
         send_image(args.image)
@@ -352,6 +354,7 @@ def main():
     g.add_argument("--image", "-i", help="이미지 파일 경로 (.png 권장)")
     g.add_argument("--file", "-f", help="파일 경로 (.txt/.pdf/.xlsx 등)")
     p.add_argument("--verify-me", action="store_true", help="(나) 본인 채팅인지 'badge me'로 검증 후 발송")
+    p.add_argument("--no-signature", action="store_true", help="텍스트에 'sent with claude code' 시그니처 빼기")
     p.add_argument("--json", "-j", action="store_true", help="JSON 출력")
     args = p.parse_args()
 
