@@ -66,9 +66,18 @@ def _cp(sub, room, *extra):
 
 
 def read_thread_text(room):
-    """스레드 텍스트. read가 내부에서 전면화(read의 _front). ★빈 결과일 때만 재오픈 복구
-    (이미 열린 창은 open_exact 재실행이 오히려 상태를 흐트려 빈값 유발 — 방치 open 금지)."""
-    txt = _cp("read", room)
+    """스레드 텍스트. read가 내부에서 전면화(read의 _front).
+    ★자가복구: (a)read 예외(AXErrorInvalidUIElement 등 창 닫힘/무효) 또는 (b)빈 결과 → 재오픈 후 재시도.
+    (평상시엔 재오픈 안 함 — 이미 열린 창에 open_exact 재실행이 상태를 흐트려 빈값 유발하므로.)"""
+    try:
+        txt = _cp("read", room)
+    except Exception as e:
+        log(f"read 예외({str(e)[:70]}) → 재오픈 복구")
+        try:
+            _cp("open", room)
+        except Exception as e2:
+            log(f"reopen warn: {e2}")
+        txt = _cp("read", room)   # 재시도(그래도 실패하면 상위에서 ERROR exit 2 → wake)
     if not txt.strip():
         log("read empty → 재오픈 복구 시도")
         try:
