@@ -81,6 +81,8 @@ def main():
         if cmd == "open":
             print(cmd_open(room))
         elif cmd == "read":
+            # ★read도 전면화 필요 — atomacos AX 트리 읽기가 KakaoTalk 비활성/타Space면 빈 결과.
+            #   감지 신뢰성 우선(고객 회신 놓침 방지). 전면화 빈도는 핫모드(대화 후 ~5분)에만 집중, 이후 감쇠.
             _front(); _, txt = read_text(room, 80); print(txt)
         elif cmd == "lastmsg":
             _front(); _, txt = read_text(room, 40); print(txt[-600:])
