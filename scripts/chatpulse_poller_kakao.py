@@ -4,7 +4,7 @@
 
 감쇠 스케줄(정본 동일): 마지막 대화 후 0~5분=30초 / 5~30분=10분 / 30분~=1시간(야간 22~09시는 담날 09시까지 sleep).
 새 메시지 감지(스레드 텍스트 변화) → 새 내용 출력 + exit 0. 오류 exit 2. 8시간 하트비트 exit 3.
-※카톡은 채팅만 감시(그로우톡의 주문상태 감시는 해당 없음). recycle = Dock 재전면 + 방 재오픈.
+※카톡은 채팅만 감시(그로우톡의 주문상태 감시는 해당 없음). read는 전면화 내장, 빈 결과일 때만 재오픈 복구.
 
 사용: python3 chatpulse_poller_kakao.py --room "리브리" [--last-activity "2026-07-15T12:22:00"]
 자격증명 하드코딩 금지(카톡 데스크톱 앱 세션이라 비번 불필요). run_in_background로 띄우고 exit 시 에이전트 재기동."""
@@ -32,14 +32,18 @@ def _cp(sub, room, *extra):
     return out
 
 
-def read_thread_text(room, recycle=False):
-    """스레드 텍스트. recycle=True면 Dock 재전면 + 방 재오픈부터(세션/창 복구)."""
-    if recycle:
+def read_thread_text(room):
+    """스레드 텍스트. read가 내부에서 전면화(read의 _front). ★빈 결과일 때만 재오픈 복구
+    (이미 열린 창은 open_exact 재실행이 오히려 상태를 흐트려 빈값 유발 — 방치 open 금지)."""
+    txt = _cp("read", room)
+    if not txt.strip():
+        log("read empty → 재오픈 복구 시도")
         try:
             _cp("open", room)
         except Exception as e:
-            log(f"recycle open warn: {e}")
-    return _cp("read", room)
+            log(f"reopen warn: {e}")
+        txt = _cp("read", room)
+    return txt
 
 
 def interval_for(elapsed_sec, now):
@@ -66,7 +70,7 @@ def main():
             last_activity = datetime.fromisoformat(sys.argv[i + 1]).timestamp()
 
     try:
-        baseline = read_thread_text(room, recycle=True)
+        baseline = read_thread_text(room)
     except Exception as e:
         print(f"ERROR baseline: {e}", flush=True); sys.exit(2)
     log(f"baseline {len(baseline)} chars, room={room}, "
@@ -85,7 +89,7 @@ def main():
             print("HEARTBEAT: no new message, restart me", flush=True); sys.exit(3)
 
         try:
-            cur = read_thread_text(room, recycle=(iv >= 600))
+            cur = read_thread_text(room)
         except Exception as e:
             print(f"ERROR poll: {e}", flush=True); sys.exit(2)
 
