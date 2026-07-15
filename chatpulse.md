@@ -16,27 +16,27 @@
 - 상대답장·내발신 = `last_activity` 리셋(→30초). 내발신 감지 시 폴러는 baseline만 갱신하고 **깨우지 않음**.
 - 야간(22:00~09:00 KST)은 **1시간 모드일 때만 중지** → 폴러 `exit 3 (status=night_pause, resume_at=09:00)`. 에이전트가 09:00로 재스케줄(ScheduleWakeup/cron). 뜨거우면(30초/10분) 밤에도 계속.
 
-## 폴러 계약 (exit 코드)
+## 폴러 계약 (정본 정합 — 여포 chatpulse_poller.py와 동형)
 
-- **exit 0** = 상대 새 메시지 감지. stdout `{status:"new_message", room, last:{sender,text,time,is_mine}, last_fp, last_activity}`. → 에이전트가 맥락 읽고 **답장 문구 매번 생성**·발송 후, 새 `--last-fp`/`--last-activity`로 폴러 재기동.
-- **exit 2** = 오류(카톡 사망/읽기 불가). → 에이전트가 복구(Dock 전면화·재오픈) 후 재기동.
-- **exit 3** = 하트비트(max_run 8h 도달) 또는 야간중지. → 재시작/재스케줄 판단.
+- **감지 방식 = 스레드 텍스트 diff** (정본과 동일). baseline(read 출력) 대비 `cur != baseline`이면 새 이벤트. ★is_mine 판정 안 씀 — 내 발신도 변화이므로, **발송 후엔 에이전트가 새 baseline으로 폴러를 재기동**해 자기 발신을 재감지하지 않게 한다(정본 방식).
+- **exit 0** = 새 메시지 감지. stdout = `NEW_MESSAGE:\n<새 부분 텍스트>`. → 에이전트가 **스샷으로 내용 확인**(아래) → 답장 매번 생성·발송 → 새 `--last-activity`로 폴러 재기동.
+- **exit 2** = 오류(카톡 사망/읽기 불가). stdout `ERROR ...`. → 복구(Dock 전면화·재오픈) 후 재기동.
+- **exit 3** = 8h 하트비트(`HEARTBEAT: ...`). → 재시작 판단. ※야간(22~09)은 exit 아니라 **09시까지 sleep**(정본 동일).
 
 ## 운용 흐름 (리브리 예)
 
 ```bash
-# 1) 정확오픈(오방 배제) — 최초 1회
+# 1) 정확오픈(오방 배제) — 최초 1회 → "OPEN_OK"
 python3 scripts/chatpulse_kakao.py open "리브리"
-# 2) baseline 확립
-python3 scripts/chatpulse_kakao.py lastmsg "리브리"     # → fp 확보
-# 3) 폴러 백그라운드 기동(run_in_background)
-python3 scripts/chatpulse_poller_kakao.py --room "리브리" --last-fp <fp> --last-activity <epoch>
-# 4) 폴러 exit 0(상대 새 메시지) → 에이전트 기상 → read/스샷으로 내용 확인 → 답장 생성 → send → 폴러 재기동
-python3 scripts/chatpulse_kakao.py send "리브리" "<맥락 맞춘 답장>"
+# 2) 폴러 백그라운드 기동(run_in_background). ★라이브 기동은 현빈 확인 게이트 통과 후에만.
+python3 scripts/chatpulse_poller_kakao.py --room "리브리" --last-activity "2026-07-15T12:22:00"
+# 3) 폴러 exit 0(NEW_MESSAGE) → 에이전트 기상 → ★스샷으로 내용 확인 → 답장 생성 → send → 새 --last-activity로 재기동
+python3 scripts/chatpulse_kakao.py send "리브리" "<맥락 맞춘 답장>"    # 단문 Enter 발송(멀티라인/링크는 사람 전송버튼 경로)
 ```
 
-- ⚠️ **내용 읽기**: 카드/파일/미리보기 메시지는 `read`가 `text:null`로 잡을 수 있다(kakao_read 한계) → **스크린샷(screencapture)으로 내용 확인**(KNOWLEDGE 참조). 폴러의 감지(fp 변화)는 정상.
+- ⚠️ **내용 읽기는 스샷 필수**: 리브리 방은 `kakao_read`가 본문을 **빈칸**으로 잡고 발신자도 뭉갠다(카드/파일뿐 아니라 일반 메시지도) → `read`/`lastmsg`는 **변화 감지용**으로만 쓰고, **실제 내용은 `screencapture`로 확인**(KNOWLEDGE). 감지(텍스트 diff, 타임스탬프 행 변화)는 이 상태로도 견고.
 - ⚠️ **정방/오방**: `리브리`는 `open_exact`로만 열기(chatpulse_kakao `open`이 래핑). 발송 전 멤버(고야 한수지·이민준) 확인은 KNOWLEDGE의 evaluator 게이트 준용.
+- ⚠️ **채팅만 감시**: 그로우톡판의 주문상태(입고완료→무게측정→결제대기) 감시는 리브리엔 해당 없음(채팅 diff만).
 
 ## 대화 규칙 (챗펄스 준수 — 카톡 발화 시 반드시)
 
