@@ -14,10 +14,43 @@ from datetime import datetime, timedelta
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 HEARTBEAT_HOURS = 8
+# ★기상 보장(현빈/카리나 2026-07-15): 감지/오류 시 tmux로 이 세션에 직접 주입해 에이전트를 깨운다.
+#   run_in_background task-notification에만 의존하면 /clear·턴종료·nohup 고아화로 기상이 끊길 수 있음(실증 2회).
+WAKE_SESSION = os.environ.get("CHATPULSE_WAKE_SESSION", "imac-김민재")
+TMUX = "/usr/local/bin/tmux"
 
 
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def wake_agent(msg):
+    """tmux send-keys로 WAKE_SESSION(에이전트 세션)에 msg 주입 → 새 턴으로 기상 보장.
+    tele-code 패턴 간이판: 본문 -l → 딜레이 → Enter → 제출검증·재시도(최대3). 실패해도 무해(폴러 exit로 하니스 notification 이중경로)."""
+    if not WAKE_SESSION:
+        return
+    # ★TMUX 환경변수 제거(중첩 tmux 회피) + 한글 로케일. env 래퍼는 BSD 인자순서 함정이 있어 env dict로 주입.
+    _env = {k: v for k, v in os.environ.items() if k != "TMUX"}
+    _env["LC_ALL"] = "ko_KR.UTF-8"
+
+    def tm(*args):
+        return subprocess.run([TMUX, *args], env=_env, capture_output=True, text=True)
+    try:
+        if tm("has-session", "-t", WAKE_SESSION).returncode != 0:
+            log(f"wake: 세션 없음 {WAKE_SESSION}"); return
+        tm("send-keys", "-t", WAKE_SESSION, "-l", msg)
+        time.sleep(0.6)
+        tm("send-keys", "-t", WAKE_SESSION, "Enter")
+        time.sleep(1)
+        for _ in range(3):
+            scr = tm("capture-pane", "-t", WAKE_SESSION, "-p").stdout
+            if "esc to interrupt" in scr:
+                break
+            tm("send-keys", "-t", WAKE_SESSION, "Enter")
+            time.sleep(1)
+        log(f"wake 주입 완료 → {WAKE_SESSION}")
+    except Exception as e:
+        log(f"wake 실패(무해): {str(e)[:100]}")
 
 
 def _cp(sub, room, *extra):
@@ -86,15 +119,18 @@ def main():
         time.sleep(iv)
 
         if time.time() - started > HEARTBEAT_HOURS * 3600:
+            wake_agent(f"[챗펄스 폴러→하트비트] {room} 8시간 무변화. 폴러 재시작/종료 판단하세요.")
             print("HEARTBEAT: no new message, restart me", flush=True); sys.exit(3)
 
         try:
             cur = read_thread_text(room)
         except Exception as e:
+            wake_agent(f"[챗펄스 폴러→오류] {room} 폴링 오류: {str(e)[:120]}. 카톡 전면화·재오픈 복구 후 폴러 재기동 필요.")
             print(f"ERROR poll: {e}", flush=True); sys.exit(2)
 
         if cur != baseline:
             new_part = cur[len(baseline):] if cur.startswith(baseline) else cur[-800:]
+            wake_agent(f"[챗펄스 폴러→감지] {room} 방에 새 메시지 왔습니다. 카톡 스샷 판독 후 챗펄스 규칙·게이트 준수해 대응하세요. 미리보기: {new_part.strip()[-160:]}")
             print("NEW_MESSAGE:", flush=True)
             print(new_part.strip()[-800:], flush=True)
             sys.exit(0)
