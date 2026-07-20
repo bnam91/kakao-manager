@@ -31,6 +31,9 @@ def _msgs_to_text(msgs):
         sender = (m.get("sender") or "?").strip()
         t = (m.get("time") or "").strip()
         txt = (m.get("text") or "").strip()
+        # ★미읽음 카운트 배지(숫자만) 아티팩트 제외 — 멤버가 읽어 카운트가 바뀌어도 diff 오탐 안 나게.
+        if sender.isdigit() and not t and not txt:
+            continue
         lines.append(f"{sender} | {t} | {txt}")
     return "\n".join(lines)
 
