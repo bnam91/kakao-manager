@@ -207,6 +207,20 @@ $ALIAS_RUN kakao_send.py "채팅방" "메시지" --no-signature
 ```
 > ★★★ 서명 금지(현빈 지시 2026-06-17): 외부로 나가는 모든 메시지 끝에 'sent with claude code' 같은 서명이 **절대 붙으면 안 됨**. vendored `kakao_send.py`의 `SIGNATURE`를 빈 문자열로 패치해 뒀고(스킬 폴더 사본이라 외부 git pull 영향 없음 = 휘발 안 됨), 안전벨트로 **전송 시 항상 `--no-signature`도 명시**한다. 전송 후 read로 끝줄에 서명 안 붙었는지 검증할 것.
 
+> ★★★ **pbcopy 안 먹는 환경의 전송 우회 (2026-08-04 실전, 반드시 확인)**: 일부 맥/세션에서 **`pbcopy`가 pasteboard 접근 불가**(클립보드 길이 0). `kakao_send.py`의 `type_text()`·`send_safe.py`는 pbcopy→Cmd+V 경로라 **아무것도 안 나가는데 `success:true`/`ok`를 반환**(rows_before==rows_after인데 성공으로 오탐). → **증상 판정**: 발송 후 스샷/read로 말풍선이 실제로 생겼는지 확인. rows 불변인데 success면 pbcopy 함정. → **확실한 우회 = atomacos로 입력란 직접 세팅**: 방 창의 마지막(y최대) `AXTextArea`를 찾아 `el.AXValue="<본문>"` + `el.AXFocused=True` → osascript `key code 36`(엔터). 이 방식이 유일하게 실발송됨. ★전송 전/후 **반드시 스크린샷 실물 검증**(입력란 표시 확인 → 엔터 → 말풍선 확인). 클립보드가 필요하면 `pbcopy` 말고 **osascript `set the clipboard to (read POSIX file … as «class utf8»)`** 를 쓴다(이건 동작).
+
+> ★★★ **손쉬운 사용·입력 모니터링 권한 OFF 진단 (2026-08-04, 시간 태우지 말 것)**: 카톡 UI 자동화가 **통째로 막히면** 곧장 이 진단부터. 증상 = osascript `keystroke`→**error 1002**("키스트로크 허용 안 됨"), `click`/UI제어→**-25211**("보조 접근 거부"), 카톡이 자동로그인(Auto Login=1)돼 있어도 **메인창이 트레이로 숨어 `app.windows()`가 0개**. **★재시작·activate·메뉴바/Dock 클릭 등 우회는 전부 실패한다** — 이건 **사람이 시스템설정 > 개인정보 보호 및 보안 > ①손쉬운 사용 ②입력 모니터링에서 터미널/osascript를 직접 ON 해야만** 풀린다(자동화 불가). → **반복 재시도로 시간 태우지 말고 즉시 현빈에게 권한 ON 요청 보고**. 빠른 체크: `osascript -e 'tell application "System Events" to key code 999'` 가 error 1002면 막힌 것, 조용히 통과하면 권한 정상.
+
+### 인라인 이미지(사진) 원본 판독 → 로컬 저장 후 Read (2026-08-04 실전)
+카톡 말풍선은 넓은 이미지의 **좌우를 하드 크롭**해 표/문서 일부만 보인다. 원본 전체를 읽으려면 **우클릭 〉 저장하기**로 `~/Downloads`에 받아 `Read`한다(더블클릭 뷰어는 안 열리고, "복사하기"는 이미지가 아니라 텍스트만 잡힘).
+```bash
+# 1) 방 넓게 raise → 이미지 우클릭(Quartz right-click) → 컨텍스트 메뉴의 '저장하기' AXMenuItem 좌표를 atomacos로 얻어 그 좌표 클릭
+#    ★'저장하기' 좌표는 고정좌표 클릭이 자꾸 빗나감 → 반드시 atomacos AXMenuItem 'AXPosition+AXSize/2' 로 실좌표 취득해 클릭
+#    저장 패널 뜨면 osascript 'key code 36'(Return, 기본위치 수락)
+# 2) 저장 확인: find ~/Downloads -iname 'KakaoTalk_Photo_*.png' -mmin -1  → 그 경로를 Read
+```
+- ⚠️ **백그라운드 챗펄스 폴러가 atomacos를 동시에 쓰면 `system memory failure` 경합** → 이미지 저장/좌표작업 직전엔 `pkill -f chatpulse_poller_kakao`로 폴러 잠깐 정지, 작업 후 재무장.
+
 ### 이미지 전송 (PNG 클립보드 paste 방식)
 ```bash
 osascript -e 'set the clipboard to (read POSIX file "/path/to.png" as «class PNGf»)'
