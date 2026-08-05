@@ -105,11 +105,14 @@ def interval_for(elapsed_sec, now):
 def main():
     room = "리브리"
     last_activity = time.time()
+    fixed_interval = None  # --interval N: 감쇠 스케줄 대신 N초 고정 폴링(예 3분=180)
     for i, a in enumerate(sys.argv):
         if a == "--room" and i + 1 < len(sys.argv):
             room = sys.argv[i + 1]
         if a == "--last-activity" and i + 1 < len(sys.argv):
             last_activity = datetime.fromisoformat(sys.argv[i + 1]).timestamp()
+        if a == "--interval" and i + 1 < len(sys.argv):
+            fixed_interval = max(30, int(sys.argv[i + 1]))
 
     try:
         baseline = read_thread_text(room)
@@ -122,7 +125,7 @@ def main():
     while True:
         now = datetime.now()
         elapsed = time.time() - last_activity
-        iv = interval_for(elapsed, now)
+        iv = fixed_interval if fixed_interval else interval_for(elapsed, now)
         if iv >= 3600:
             log(f"sleep {iv}s (cold/night)")
         time.sleep(iv)
