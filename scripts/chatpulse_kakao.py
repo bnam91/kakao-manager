@@ -62,10 +62,24 @@ def cmd_send(room, text):
     """이미 열린 방 raise(재검색X) → 붙여넣기 → Enter → 검증. 정본 send_msg 대응(단문 Enter; 멀티라인/링크는 사람 전송버튼 경로)."""
     _front()
     import kakao_send as S
-    opened = S.open_chat(room)          # 열려있으면 raise만(오방 재검색 없음)
+    import target_guard as TG
+    try:
+        opened = S.open_chat(room)      # 열려있으면 raise만(오방 재검색 없음)
+    except TG.TargetMismatch as e:
+        return f"SEND_FAIL: {e}"
     if not opened:
         return f"SEND_FAIL: 방 열기 실패 {room}"
     time.sleep(0.4)
+    # ★타이핑 직전 대상 재확인 — 이 경로는 send_message 를 안 거치고 바로 키를 친다.
+    #   키는 '지금 포커스된 창'으로 들어가므로, 연 시점과 치는 시점 사이가 벌어지면 오발송이 된다.
+    try:
+        _app = S.get_kakao_app()
+        _focused = getattr(_app.AXFocusedWindow, 'AXTitle', None)
+        TG.assert_match(_focused, room, max_tier=2, what="포커스된 채팅창")
+    except TG.TargetMismatch as e:
+        return f"SEND_FAIL: {e}"
+    except Exception as e:
+        return f"SEND_FAIL: 대상 재확인 실패({e}) — 확인 못 하면 안 보낸다"
     S.type_text(text)                   # pbcopy + Cmd+V
     time.sleep(0.6)
     S.key_code(36)                      # Enter (단문 발송)
