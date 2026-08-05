@@ -14,7 +14,7 @@ Usage:
   send_safe.py "<본인표시명>" --file /path/to.pdf --verify-me
   send_safe.py "(채팅방) 이름" --text "안녕하세요"          # 괄호 자동 우회
 """
-import argparse, json, re, subprocess, sys, time
+import argparse, json, os, re, subprocess, sys, time
 
 try:
     import atomacos
@@ -22,8 +22,13 @@ except ImportError:
     print(json.dumps({"ok": False, "error": "atomacos not installed"}, ensure_ascii=False))
     sys.exit(2)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import target_guard as TG  # 오발송 방지 가드
+
 BUNDLE = "com.kakao.KakaoTalkMac"
 MAIN_TITLES = ("카카오톡", "KakaoTalk")
+# ★발송 경로는 부분일치 금지(tier2 까지). 별명은 config.py --resolve 로 정확한 방이름을 먼저 확정할 것.
+SEND_MAX_TIER = 2
 
 
 def ascript(s):
@@ -66,18 +71,24 @@ def main_window(app):
 
 
 def find_open_chat_window(app, chat_name):
-    """제목에 chat_name이 포함된 채팅창(메인 제외) 반환."""
-    needle = chat_name.lower()
+    """채팅창(메인 제외) 반환. ★부분일치로 아무거나 고르지 않는다.
+    구판은 `needle in title` 이라 "신현빈" 이 "신현빈 대표님 IP_Team" 을 잡을 수 있었다(발송 경로!).
+    후보가 여러 개면 TargetMismatch 로 중단. 없으면 None."""
+    wins = []
     for w in app.windows():
         try:
             t = w.AXTitle
         except Exception:
             t = None
-        if not t or t in MAIN_TITLES:
-            continue
-        if needle in t.lower():
-            return w
-    return None
+        if t and t not in MAIN_TITLES:
+            wins.append(w)
+    try:
+        return TG.pick(wins, chat_name, title_of=lambda w: w.AXTitle,
+                       max_tier=SEND_MAX_TIER, what="발송 대상 채팅창")
+    except TG.TargetMismatch as e:
+        if "모호" in str(e):
+            raise
+        return None
 
 
 def ensure_chat_tab_simple():
@@ -102,12 +113,13 @@ def is_self_chat_in_list(app, chat_name):
     if not main:
         return None
 
-    needle = chat_name.lower()
     rows = []
     find_role_all(main, "AXRow", rows, max_depth=12)
     if not rows:
         return None
 
+    # ★부분일치로 첫 줄을 집지 않는다 — 이름별로 모아 정확일치 후보가 1개일 때만 검사한다.
+    named = []
     for row in rows:
         sts = []
         find_role_all(row, "AXStaticText", sts, max_depth=8)
@@ -120,18 +132,27 @@ def is_self_chat_in_list(app, chat_name):
                     break
             except Exception:
                 pass
-        if not name or needle not in name.lower():
-            continue
-        imgs = []
-        find_role_all(row, "AXImage", imgs, max_depth=8)
-        for im in imgs:
-            try:
-                if im.AXDescription == "badge me":
-                    return True
-            except Exception:
-                pass
-        return False
-    return None
+        if name:
+            named.append((name, row))
+
+    try:
+        hit = TG.pick(named, chat_name, title_of=lambda nr: nr[0],
+                      max_tier=SEND_MAX_TIER, what="자기채팅 검증 대상 방")
+    except TG.TargetMismatch as e:
+        if "모호" in str(e):
+            raise
+        return None
+
+    _name, row = hit
+    imgs = []
+    find_role_all(row, "AXImage", imgs, max_depth=8)
+    for im in imgs:
+        try:
+            if im.AXDescription == "badge me":
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def normalize_chat_name(name):
@@ -196,18 +217,16 @@ def clear_search_box():
 
 
 def raise_chat_window(app, chat_name):
-    """채팅창 raise."""
-    needle = chat_name.lower()
-    for w in app.windows():
-        try:
-            t = w.AXTitle
-            if t and t not in MAIN_TITLES and needle in t.lower():
-                w.Raise()
-                time.sleep(0.4)
-                return w
-        except Exception:
-            pass
-    return None
+    """채팅창 raise. ★부분일치 금지 — find_open_chat_window 와 같은 가드를 쓴다."""
+    w = find_open_chat_window(app, chat_name)
+    if not w:
+        return None
+    try:
+        w.Raise()
+        time.sleep(0.4)
+    except Exception:
+        pass
+    return w
 
 
 def get_input_area_position(chat_win):
@@ -290,6 +309,8 @@ def run(args):
             return {"ok": False, "error": "verify-me failed: 'badge me' AXImage 없음 (본인 채팅 아님)", "chat": args.chat}
 
     # === Step 2: 채팅창 열기 ===
+    # resolved_target = 실제로 대조할 기준 이름(정규화 재시도 시 갱신). Step3.5 재확인에 쓴다.
+    resolved_target = args.chat
     chat_win = find_open_chat_window(app, args.chat)
     tried_norm = False
     if not chat_win:
@@ -305,6 +326,8 @@ def run(args):
             search_and_open(norm)
             app = get_app()
             chat_win = find_open_chat_window(app, norm)
+            if chat_win:
+                resolved_target = norm
     if not chat_win:
         return {"ok": False, "error": "채팅창 못 찾음", "chat": args.chat, "tried_norm": tried_norm}
 
@@ -314,6 +337,24 @@ def run(args):
         return {"ok": False, "error": "입력란 포커스 실패", "chat": chat_win.AXTitle}
 
     rows_before = count_rows(chat_win)
+
+    # === Step 3.5: ★발송 직전 대상 재확인 (조용한 폴백 금지 규칙3) ===
+    # 찾은 시점과 실제로 키를 치는 시점 사이에 창이 바뀔 수 있다.
+    # 키 입력은 '지금 포커스된 창'으로 들어가므로, 그 창이 타깃인지 다시 본다.
+    try:
+        final_title = chat_win.AXTitle
+        TG.assert_match(final_title, resolved_target, max_tier=SEND_MAX_TIER, what="발송 대상")
+        focused = app.AXFocusedWindow
+        focused_title = getattr(focused, "AXTitle", None)
+        if focused_title != final_title:
+            return {"ok": False,
+                    "error": f"★발송 중단: 포커스된 창이 대상과 다름 — 대상='{final_title}' / 포커스='{focused_title}'",
+                    "chat": final_title}
+    except TG.TargetMismatch as e:
+        return {"ok": False, "error": str(e), "chat": getattr(chat_win, "AXTitle", None)}
+    except Exception as e:
+        return {"ok": False, "error": f"★발송 중단: 대상 재확인 실패({e}) — 확인 못 하면 안 보낸다",
+                "chat": getattr(chat_win, "AXTitle", None)}
 
     # === Step 4: 전송 ===
     if args.text:
@@ -355,7 +396,12 @@ def main():
     p.add_argument("--json", "-j", action="store_true", help="JSON 출력")
     args = p.parse_args()
 
-    result = run(args)
+    # ★TargetMismatch 가 그대로 터지면 JSON 출력 계약이 깨진다(호출부가 파싱 실패 →
+    #   "실패인지 성공인지 모름" 상태가 된다). 발송 안 됐음을 구조화해서 돌려준다.
+    try:
+        result = run(args)
+    except TG.TargetMismatch as e:
+        result = {"ok": False, "error": str(e), "chat": args.chat, "sent": False}
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:

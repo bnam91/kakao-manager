@@ -17,6 +17,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -27,6 +28,12 @@ try:
 except ImportError:
     print("Error: atomacos not installed. Run: uv add atomacos")
     sys.exit(1)
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import target_guard as TG  # 오발송 방지 가드(정확일치·모호중단·폴백금지)
+
+# 읽기 경로는 부분일치(tier3)까지 허용하되 **후보가 1개일 때만**. 발송 경로는 tier2 까지.
+READ_MAX_TIER = 3
 
 # Constants
 KAKAO_BUNDLE_ID = "com.kakao.KakaoTalkMac"
@@ -98,12 +105,17 @@ def find_main_window(kakao_app):
 
 
 def find_open_chat(kakao_app, chat_name: str):
-    """이미 열린 채팅방 창에서 이름이 일치하는 것 찾기."""
-    for win in kakao_app.windows():
-        title = win.AXTitle
-        if title != "카카오톡" and chat_name.lower() in title.lower():
-            return win
-    return None
+    """이미 열린 채팅방 창 찾기. ★부분일치로 아무거나 고르지 않는다 —
+    후보가 여러 개면 TargetMismatch 로 중단(target_guard 규칙2). 없으면 None."""
+    wins = [w for w in kakao_app.windows() if safe_get_attr(w, 'AXTitle') not in MAIN_WINDOW_TITLES]
+    try:
+        return TG.pick(wins, chat_name,
+                       title_of=lambda w: safe_get_attr(w, 'AXTitle'),
+                       max_tier=READ_MAX_TIER, what="채팅창")
+    except TG.TargetMismatch as e:
+        if "모호" in str(e):
+            raise
+        return None
 
 
 def get_all_chat_windows(kakao_app) -> list:
@@ -144,8 +156,14 @@ def clear_search_and_go_main():
 
 
 def search_and_open_chat(chat_name: str):
-    """검색으로 채팅방 열기."""
+    """검색으로 채팅방 열기.
+    ⚠️ Down+Enter 는 검색결과 **첫 줄**을 연다 — 그게 요청한 방이라는 보장이 없다.
+    (2026-08-05 실측: "신현빈" 요청에 「고야태스크」방이 열렸다.)
+    → 연 뒤 반드시 제목을 검증하고, 불일치면 창을 닫고 중단한다."""
     clear_search_and_go_main()
+
+    kakao = get_kakao_app()
+    before = {safe_get_attr(w, 'AXTitle') for w in get_all_chat_windows(kakao)}
 
     key_code(3, "command down")  # Cmd+F
     time.sleep(0.5)
@@ -160,6 +178,22 @@ def search_and_open_chat(chat_name: str):
     time.sleep(0.2)
     key_code(36)  # Enter
     time.sleep(0.8)
+
+    # === ★열린 게 정말 그 방인지 검증 (조용한 폴백 금지) ===
+    kakao = get_kakao_app()
+    opened = [w for w in get_all_chat_windows(kakao)
+              if safe_get_attr(w, 'AXTitle') not in before]
+    if not opened:                      # 새 창이 없으면 이미 열려있던 창 중에서 확인
+        opened = get_all_chat_windows(kakao)
+    try:
+        win = TG.pick(opened, chat_name,
+                      title_of=lambda w: safe_get_attr(w, 'AXTitle'),
+                      max_tier=READ_MAX_TIER, what="검색으로 연 채팅방")
+    except TG.TargetMismatch:
+        key_code(53)                    # Escape — 잘못 열린 창을 닫는다
+        time.sleep(0.3)
+        raise
+    return win
 
 
 def close_chat():
@@ -485,22 +519,15 @@ def read_chat(chat_name: str, limit: int = 100) -> tuple[str | None, list[dict]]
     if chat_win:
         return chat_win.AXTitle, extract_messages(chat_win, limit)
 
-    before_titles = set(win.AXTitle for win in get_all_chat_windows(kakao))
-    search_and_open_chat(chat_name)
-    kakao = get_kakao_app()
-
-    after_windows = get_all_chat_windows(kakao)
-    new_windows = [win for win in after_windows if win.AXTitle not in before_titles]
-
-    if new_windows:
-        chat_win = new_windows[0]
-    elif (chat_win := find_open_chat(kakao, chat_name)):
-        pass
-    elif after_windows:
-        chat_win = after_windows[0]
-    else:
+    # ★검증된 창만 받는다. 못 찾거나 모호하면 search_and_open_chat 이 TargetMismatch 로 중단.
+    #   (구판은 new_windows[0] → after_windows[0] 로 **아무 창이나** 폴백했다 = 엉뚱한 방 읽기)
+    chat_win = search_and_open_chat(chat_name)
+    if not chat_win:
         return None, []
 
+    # 읽기 직전 재확인 — 찾은 시점과 읽는 시점 사이에 창이 바뀔 수 있다
+    TG.assert_match(safe_get_attr(chat_win, 'AXTitle'), chat_name,
+                    max_tier=READ_MAX_TIER, what="읽을 채팅방")
     return chat_win.AXTitle, extract_messages(chat_win, limit)
 
 
@@ -510,7 +537,9 @@ def read_chat(chat_name: str, limit: int = 100) -> tuple[str | None, list[dict]]
 
 def main():
     parser = argparse.ArgumentParser(description='KakaoTalk 채팅방 읽기 CLI')
-    parser.add_argument('chat_name', nargs='?', help='채팅방 이름 (부분 일치)')
+    parser.add_argument('chat_name', nargs='?',
+                        help='채팅방 이름 (완전일치 우선. 부분일치는 후보가 유일할 때만 허용, '
+                             '2개 이상이면 후보를 보여주고 중단)')
     parser.add_argument('--limit', '-l', type=int, default=100, help='최대 메시지 수 (기본: 100)')
     parser.add_argument('--list', action='store_true', help='채팅방 목록 보기')
     parser.add_argument('--search', '-s', type=str, help='카카오톡 검색창에서 검색 후 결과 목록')
@@ -581,4 +610,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # ★대상 모호/불일치는 트레이스백 대신 한 줄로 시끄럽게(exit 2). 조용한 통과 금지.
+    try:
+        main()
+    except TG.TargetMismatch as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(2)

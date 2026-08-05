@@ -12,6 +12,7 @@ Usage:
 SIGNATURE = ""  # 서명 제거(현빈 지시 2026-06-17): 메시지 끝에 아무것도 붙이지 않음
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -22,8 +23,13 @@ except ImportError:
     print("Error: atomacos not installed. Run: uv add atomacos")
     sys.exit(1)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import target_guard as TG  # 오발송 방지 가드
+
 KAKAO_BUNDLE_ID = "com.kakao.KakaoTalkMac"
 MAIN_WINDOW_TITLES = ("카카오톡", "KakaoTalk")
+# ★발송 경로는 부분일치 금지(tier2 까지)
+SEND_MAX_TIER = 2
 
 
 def run_applescript(script: str) -> str:
@@ -78,14 +84,15 @@ def raise_main_window(kakao_app):
 
 
 def find_open_chat(kakao_app, chat_name: str):
-    """이미 열린 채팅방 창에서 이름이 일치하는 것 찾기."""
-    for win in kakao_app.windows():
-        title = win.AXTitle
-        if title in MAIN_WINDOW_TITLES:
-            continue
-        if chat_name.lower() in title.lower():
-            return win
-    return None
+    """이미 열린 채팅방 창 찾기. ★부분일치 금지 — 후보 여러 개면 TargetMismatch 중단, 없으면 None."""
+    wins = [w for w in kakao_app.windows() if w.AXTitle not in MAIN_WINDOW_TITLES]
+    try:
+        return TG.pick(wins, chat_name, title_of=lambda w: w.AXTitle,
+                       max_tier=SEND_MAX_TIER, what="발송 대상 채팅창")
+    except TG.TargetMismatch as e:
+        if "모호" in str(e):
+            raise
+        return None
 
 
 def get_all_chat_windows(kakao_app) -> list:
@@ -131,24 +138,14 @@ def open_chat(chat_name: str):
         return chat_win.AXTitle
 
     # 검색해서 열기
-    before_titles = set(win.AXTitle for win in get_all_chat_windows(kakao))
     search_and_open_chat(chat_name)
 
     kakao = get_kakao_app()
-    after_windows = get_all_chat_windows(kakao)
-    new_windows = [win for win in after_windows if win.AXTitle not in before_titles]
-
-    if new_windows:
-        return new_windows[0].AXTitle
-
+    # ★구판은 new_windows[0] → after_windows[0] 로 **아무 채팅창이나** 반환했다.
+    #   검색이 빗나가면 엉뚱한 방 제목을 돌려주고, 그 방에 그대로 타이핑+Enter 가 나갔다.
+    #   → 이제 정확일치 검증을 통과한 창만 반환하고, 아니면 None(호출부가 발송 중단).
     chat_win = find_open_chat(kakao, chat_name)
-    if chat_win:
-        return chat_win.AXTitle
-
-    if after_windows:
-        return after_windows[0].AXTitle
-
-    return None
+    return chat_win.AXTitle if chat_win else None
 
 
 def send_message_via_keyboard(message: str):
@@ -186,6 +183,22 @@ def send_message(chat_name: str, message: str, close_after: bool = False) -> dic
     result['chat'] = chat_title
     time.sleep(0.3)
 
+    # 1.5 ★타이핑 직전 대상 재확인 (조용한 폴백 금지 규칙3)
+    #     키 입력은 '지금 포커스된 창'으로 들어간다 — 그 창이 타깃이 아니면 절대 치지 않는다.
+    try:
+        kakao = get_kakao_app()
+        focused_title = getattr(kakao.AXFocusedWindow, 'AXTitle', None)
+        TG.assert_match(focused_title, chat_name, max_tier=SEND_MAX_TIER, what="포커스된 채팅창")
+        if focused_title != chat_title:
+            result['error'] = (f"★발송 중단: 포커스 창='{focused_title}' / 열었던 방='{chat_title}' 불일치")
+            return result
+    except TG.TargetMismatch as e:
+        result['error'] = str(e)
+        return result
+    except Exception as e:
+        result['error'] = f"★발송 중단: 대상 재확인 실패({e}) — 확인 못 하면 안 보낸다"
+        return result
+
     # 2. 메시지 전송 (키보드 입력 방식)
     # 채팅창이 활성화된 상태에서 바로 입력
     send_message_via_keyboard(message)
@@ -201,7 +214,9 @@ def send_message(chat_name: str, message: str, close_after: bool = False) -> dic
 
 def main():
     parser = argparse.ArgumentParser(description='KakaoTalk 메시지 발송')
-    parser.add_argument('chat_name', help='채팅방 이름 (부분 일치)')
+    parser.add_argument('chat_name',
+                        help='채팅방 이름 (★발송은 완전일치/정규화일치만. 부분일치 금지 — '
+                             '애매하면 후보를 보여주고 중단한다)')
     parser.add_argument('message', help='보낼 메시지')
     parser.add_argument('--close', '-c', action='store_true', help='보내고 나서 창 닫기')
     parser.add_argument('--json', '-j', action='store_true', help='JSON 출력')
@@ -214,7 +229,11 @@ def main():
     if not args.no_signature:
         message = args.message + SIGNATURE
 
-    result = send_message(args.chat_name, message, args.close)
+    # ★대상 모호/불일치는 예외로 올라온다 — 발송 안 됐음을 결과 형식 그대로 알린다
+    try:
+        result = send_message(args.chat_name, message, args.close)
+    except TG.TargetMismatch as e:
+        result = {'success': False, 'chat': None, 'message': message, 'error': str(e)}
 
     if args.json:
         import json
