@@ -12,7 +12,9 @@ description: 카카오톡 Mac 앱을 Claude Code 터미널에서 직접 조작�
 > - **발송 경로는 부분일치 금지**(`send_safe.py`/`kakao_send.py`). 별명은 `config.py --resolve` 로 정확한 방이름을 먼저 확정할 것. 읽기(`kakao_read.py`)는 후보가 **유일할 때만** 부분일치 허용.
 > - **발송 직전 재확인**: 키 입력은 "지금 포커스된 창"으로 들어가므로, 타이핑 직전 포커스 창 제목을 다시 대조하고 어긋나면 안 보낸다.
 > - 계기: 검색은 결과 목록에서 `Down+Enter`로 **첫 줄을 무조건** 열었다 — `"신현빈"` 요청에 「고야태스크」방이 열렸다(실측). 읽기라 피해는 없었지만 같은 구조가 발송 경로에도 있었다.
-> - 자가검증: `python3 scripts/test_target_guard.py` (카톡 없이 실행, 13케이스)
+> - **별명(config)도 같은 규칙**: `--resolve` 는 후보가 2개면 고르지 않고 중단(exit 2), 미등록이면 exit 3 + stderr 경고(조용한 통과 금지), 부분일치로 걸리면 경고를 남긴다. **별명은 짧고 고유하게** — 다른 방 이름을 부분문자열로 품는 키워드(예 `"세무 고야"`)를 넣으면 그 방으로 끌려간다(2026-08-05 실측·회수).
+> - **`--set-account` 는 이제 진짜 병합**(기존 `kakao.id/pw` 보존). 통째 교체는 `--replace-account` 로 명시. 저장 결과에 id/pw 가 비면 저장을 거부한다.
+> - 자가검증: `python3 scripts/test_target_guard.py` (13케이스) · `python3 scripts/test_config_guard.py` (14케이스) — 둘 다 카톡 없이 실행
 
 > 📒 **작업 전 [`notes/KNOWLEDGE.md`](notes/KNOWLEDGE.md) 먼저 읽기** — 단톡방별 특징·열 때의 함정, 송장 운영 규칙, 계정 전환 주의 등 **Mac 간 git 공유 운영지식**. 새로 알게 된 방 특징/규칙은 거기에 한 줄 추가하고 commit+push(고객 PII·자격증명은 절대 금지, 그건 `~/.config`).
 
@@ -297,7 +299,10 @@ main = next(w for w in app.windows() if w.AXTitle == '카카오톡')
 
 ```bash
 # 사용자가 별명으로 "OO한테 보내줘" 라고 하면, 먼저 keyword 를 정확한 채팅방명으로 해석:
-python3 scripts/config.py --resolve "별명"     # -> config 에 등록된 chat_name 출력 (없으면 입력 그대로)
+python3 scripts/config.py --resolve "별명"     # -> chat_name 출력. stdout 계약은 그대로(항상 방이름 한 줄)
+#   exit 0 = 별명으로 확정 / exit 3 = 미등록(입력 그대로 출력 + stderr 경고) / exit 2 = 모호(출력 없음, 후보 표시)
+#   부분일치로 걸리면 exit 0 이어도 stderr 에 "부분일치" 경고가 뜬다 — 의도한 방인지 확인할 것
+python3 scripts/config.py --resolve "별명" --strict   # 미등록도 실패 처리(조용한 통과 완전 차단)
 python3 scripts/config.py --resolve "나"       # -> self_display_name 출력
 ```
 
